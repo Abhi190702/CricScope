@@ -225,6 +225,10 @@ trained on IPL ball-by-ball match data spanning IPL seasons from 2008–2020.
 ![Analytics](assets/analytics.png)
 
 
+## Demo
+
+![Demo](assets/cricscope.gif)
+
 ```bash
 cricscope/
 │
