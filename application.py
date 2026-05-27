@@ -1129,9 +1129,14 @@ def generate_ball_by_ball_df(pipe, batting_team, bowling_team, selected_city, ta
             win = 0.0
             lose = 1.0
         else:
-            proba = pipe.predict_proba(input_df)[0]
-            win = proba[1]
-            lose = proba[0]
+            try:
+                proba = pipe.predict_proba(input_df)[0]
+                if np.isnan(proba).any():
+                    win, lose = 0.5, 0.5
+                else:
+                    win, lose = proba[1], proba[0]
+            except Exception:
+                win, lose = 0.5, 0.5
             
         records.append({
             'over': curr_over,
@@ -1661,11 +1666,21 @@ if st.session_state.page == "Analysis":
                 lose = 1.0
 
         with st.spinner(""):
-            time.sleep(0.4)
             if is_match_decided:
-                pass # Bypasses ML model prediction cleanly
+                pass
             else:
-                proba = pipe.predict_proba(input_df)[0]
+                if pipe is None:
+                    st.error("Model not loaded. Please restart the app.")
+                    st.stop()
+                try:
+                    proba = pipe.predict_proba(input_df)[0]
+                except Exception as e:
+                    logging.error(f"Prediction failed: {e}")
+                    st.error("Prediction unavailable — model encountered an error. Adjust inputs and try again.")
+                    st.stop()
+                if np.isnan(proba).any():
+                    st.error("Model returned invalid probabilities. The training pipeline may have produced corrupted coefficients. Restart the app to retrain.")
+                    st.stop()
                 win = proba[1]
                 lose = proba[0]
 
@@ -1820,12 +1835,17 @@ if st.session_state.page == "Analysis":
                     'rrr': [c_rrr]
                 })
 
-                proj_proba = pipe.predict_proba(proj_df)[0]
+                try:
+                    proj_proba = pipe.predict_proba(proj_df)[0]
+                    bat_prob = round(proj_proba[1] * 100, 2)
+                    bowl_prob = round(proj_proba[0] * 100, 2)
+                except Exception:
+                    bat_prob, bowl_prob = 50.0, 50.0
                 rows.append({
                     "over": ov + 1,
                     "ball": bl,
-                    "batting_team_prob": round(proj_proba[1] * 100, 2),
-                    "bowling_team_prob": round(proj_proba[0] * 100, 2)
+                    "batting_team_prob": bat_prob,
+                    "bowling_team_prob": bowl_prob
                 })
 
         export_df = pd.DataFrame(rows)

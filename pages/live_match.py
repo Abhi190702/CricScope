@@ -573,6 +573,8 @@ def compute_prediction(batting_team, bowling_team, venue, target,
         })
 
         proba = pipe.predict_proba(input_df)[0]
+        if np.isnan(proba).any():
+            return None
 
         return {
             "batting_win": round(proba[1] * 100),
