@@ -32,21 +32,32 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
+from model.feature_engineering import (
+    compute_venue_chase_win_rate,
+    compute_toss_win_rate,
+    compute_team_toss_win_rate,
+    get_venue_batting_style,
+)
+import logging
 
 logging.basicConfig(level=logging.INFO)
 
-# -----------------------------------
-# CONFIG
-# -----------------------------------
-st.set_page_config(page_title="CricScope", layout="wide", initial_sidebar_state="expanded")
+# ─────────────────────────────────────────────
+# PAGE CONFIG
+# ─────────────────────────────────────────────
+st.set_page_config(
+    page_title="CricScope",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# -----------------------------------
+# ─────────────────────────────────────────────
 # SESSION STATE
-# -----------------------------------
+# ─────────────────────────────────────────────
 if "page" not in st.session_state:
     st.session_state.page = "Dashboard"
 if "last_prediction" not in st.session_state:
@@ -54,20 +65,16 @@ if "last_prediction" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = "logistic"
 
-# -----------------------------------
-# LUXURY CSS
-# -----------------------------------
-st.markdown("""
+# ─────────────────────────────────────────────
+# GLOBAL CSS
+# ─────────────────────────────────────────────
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
 
-/* ---- RESET & BASE ---- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html, body, [class*="css"], .stApp {
-    font-family: 'DM Sans', sans-serif;
-    color: #e2dfd8;
-}
+html, body, [class*="css"], .stApp { font-family: 'DM Sans', sans-serif; color: #e2dfd8; }
 
 [data-testid="stAppViewContainer"] {
     background: #080808;
@@ -77,29 +84,23 @@ html, body, [class*="css"], .stApp {
     min-height: 100vh;
 }
 
-/* Hide only Streamlit branding — leave header & sidebar toggle untouched */
 #MainMenu { visibility: hidden; }
-footer { visibility: hidden; }
+footer    { visibility: hidden; }
 [data-testid="stDecoration"] { display: none; }
 
-/* ---- SIDEBAR ---- */
 section[data-testid="stSidebar"] {
     background: #0c0c0c;
     border-right: 1px solid rgba(212,175,55,0.12);
     width: 300px !important;
     min-width: 300px !important;
 }
-
-section[data-testid="stSidebar"] > div {
-    padding: 0;
-}
+section[data-testid="stSidebar"] > div { padding: 0; }
 
 .sidebar-brand {
     padding: 40px 32px 28px;
     border-bottom: 1px solid rgba(212,175,55,0.1);
     margin-bottom: 20px;
 }
-
 .sidebar-logo-text {
     font-family: 'Cormorant Garamond', serif;
     font-size: 32px;
@@ -112,7 +113,6 @@ section[data-testid="stSidebar"] > div {
     display: block;
     margin-bottom: 6px;
 }
-
 .sidebar-tagline {
     font-size: 11px;
     letter-spacing: 2.5px;
@@ -126,7 +126,6 @@ section[data-testid="stSidebar"] > div {
     background: linear-gradient(90deg, transparent, rgba(212,175,55,0.2), transparent);
     margin: 8px 0;
 }
-
 .sidebar-section-label {
     font-size: 10px;
     letter-spacing: 2px;
@@ -136,7 +135,6 @@ section[data-testid="stSidebar"] > div {
     font-weight: 500;
 }
 
-/* ---- NAV BUTTONS ---- */
 .stButton > button {
     width: 100%;
     text-align: left;
@@ -161,38 +159,41 @@ section[data-testid="stSidebar"] > div {
     border: none;
     box-shadow: none;
 }
-
+.stButton > button:hover  { background: rgba(212,175,55,0.06); color: #d4af37; border: none; box-shadow: none; }
 .stButton > button:active,
-.stButton > button:focus {
-    background: rgba(212,175,55,0.1);
-    color: #f0d060;
-    border: none;
-    box-shadow: none;
-    outline: none;
-}
+.stButton > button:focus  { background: rgba(212,175,55,0.1);  color: #f0d060; border: none; box-shadow: none; outline: none; }
 
-/* ---- MAIN CONTENT AREA ---- */
-.block-container {
-    padding: 0 !important;
-    max-width: 100% !important;
-}
+.block-container { padding: 0 !important; max-width: 100% !important; }
 
-/* ---- HERO SECTION ---- */
+/* hero */
 .hero-wrapper {
     padding: 64px 72px 40px;
     border-bottom: 1px solid rgba(212,175,55,0.08);
-    position: relative;
-    overflow: hidden;
+    position: relative; overflow: hidden;
 }
-
 .hero-wrapper::before {
-    content: '';
-    position: absolute;
-    top: -60px; left: -60px; right: -60px;
-    height: 200px;
+    content: ''; position: absolute; top: -60px; left: -60px; right: -60px; height: 200px;
     background: radial-gradient(ellipse, rgba(212,175,55,0.06) 0%, transparent 70%);
     pointer-events: none;
 }
+.hero-eyebrow  { font-size: 10px; letter-spacing: 4px; text-transform: uppercase; color: rgba(212,175,55,0.5); margin-bottom: 18px; font-weight: 400; }
+.hero-title    { font-family: 'Cormorant Garamond', serif; font-size: clamp(52px,7vw,88px); font-weight: 600; line-height: 0.95; letter-spacing: -1px; background: linear-gradient(160deg, #ffffff 0%, #f8f0d0 30%, #d4af37 70%, #a07820 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 18px; }
+.hero-subtitle { font-size: 15px; color: rgba(220,210,185,0.55); font-weight: 300; letter-spacing: 0.3px; max-width: 460px; line-height: 1.6; }
+.hero-badge    { display: inline-flex; align-items: center; gap: 7px; background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.2); border-radius: 100px; padding: 5px 14px 5px 10px; font-size: 11px; color: rgba(212,175,55,0.8); letter-spacing: 0.5px; margin-bottom: 24px; width: fit-content; }
+.hero-dot      { width: 6px; height: 6px; border-radius: 50%; background: #d4af37; animation: pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.8); } }
+
+/* stats row */
+.stats-row { display: flex; gap: 16px; padding: 24px 60px; border-bottom: 1px solid rgba(212,175,55,0.06); }
+.stat-pill  { flex: 1; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px 22px; transition: all 0.25s ease; }
+.stat-pill:hover { background: rgba(212,175,55,0.04); border-color: rgba(212,175,55,0.15); transform: translateY(-1px); }
+.stat-value { font-family: 'DM Mono', monospace; font-size: 26px; font-weight: 500; color: #e8d89a; line-height: 1; margin-bottom: 6px; }
+.stat-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(200,185,140,0.4); }
+
+/* input cards */
+.input-card       { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); border-radius: 20px; padding: 28px 32px; backdrop-filter: blur(20px); transition: border-color 0.3s ease; }
+.input-card:hover { border-color: rgba(212,175,55,0.15); }
+.input-label      { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: rgba(212,175,55,0.5); margin-bottom: 12px; font-weight: 500; }
 
 .hero-eyebrow {
     font-size: 10px;
@@ -345,87 +346,21 @@ section[data-testid="stSidebar"] > div {
     border-radius: 10px !important;
     color: #e2dfd8 !important;
 }
-
 .stSelectbox label, .stNumberInput label, .stSlider label, .stTextInput label {
     font-family: 'DM Sans', sans-serif !important;
-    font-size: 10px !important;
-    letter-spacing: 1.8px !important;
-    text-transform: uppercase !important;
-    color: rgba(200,185,140,0.5) !important;
+    font-size: 10px !important; letter-spacing: 1.8px !important;
+    text-transform: uppercase !important; color: rgba(200,185,140,0.5) !important;
     font-weight: 500 !important;
 }
 
-/* Slider track */
-.stSlider [data-testid="stSlider"] > div {
-    background: rgba(212,175,55,0.15) !important;
-}
-
-.stSlider [data-testid="stSlider"] > div > div {
-    background: linear-gradient(90deg, #d4af37, #f0d060) !important;
-}
-
-/* ---- TEAM VS CARD ---- */
-.team-vs-wrapper {
-    background: rgba(255,255,255,0.02);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 24px;
-    padding: 36px 28px;
-    text-align: center;
-    backdrop-filter: blur(20px);
-    position: relative;
-    overflow: hidden;
-}
-
-.team-vs-wrapper::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(212,175,55,0.04) 0%, transparent 60%);
-    pointer-events: none;
-}
-
-.team-abbr {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: 3px;
-    margin-top: 14px;
-}
-
-.vs-divider {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 48px;
-    font-weight: 300;
-    color: rgba(212,175,55,0.25);
-    line-height: 1;
-    letter-spacing: -2px;
-}
-
-.team-logo-glow {
-    border-radius: 50%;
-    transition: box-shadow 0.3s ease;
-    width: 90px;
-    height: 90px;
-    object-fit: contain;
-}
-
-/* ---- ANALYZE BUTTON ---- */
+/* analyse button */
 .stButton.analyze-btn > button {
     background: linear-gradient(135deg, #c9a227 0%, #d4af37 40%, #e8c84a 100%);
-    color: #0a0800;
-    border: none;
-    border-radius: 14px;
-    height: 52px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    transition: all 0.3s ease;
-    box-shadow: 0 8px 32px rgba(212,175,55,0.2), 0 0 0 0 rgba(212,175,55,0);
-    width: 100%;
+    color: #0a0800; border: none; border-radius: 14px; height: 52px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    letter-spacing: 2px; text-transform: uppercase; transition: all 0.3s ease;
+    box-shadow: 0 8px 32px rgba(212,175,55,0.2); width: 100%;
 }
-
 .stButton.analyze-btn > button:hover {
     box-shadow: 0 12px 48px rgba(212,175,55,0.35), 0 0 60px rgba(212,175,55,0.1);
     transform: translateY(-2px);
@@ -878,11 +813,13 @@ section[data-testid="stSidebar"] a:active {
 }
 
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# -----------------------------------
+# ─────────────────────────────────────────────
 # TEAM DATA
-# -----------------------------------
+# ─────────────────────────────────────────────
 team_data = {
     "Chennai Super Kings": {
         "logo": "http://assets.designhill.com/design-blog/wp-content/uploads/2025/03/1-5.jpg",
@@ -945,326 +882,173 @@ def train_model(model_name='logistic'):
 
     df = deliveries.merge(matches, left_on='match_id', right_on='id')
 
-    total_df = df[df['inning'] == 1].groupby('match_id')['total_runs'].sum().reset_index()
-    total_df.rename(columns={'total_runs': 'target'}, inplace=True)
-
-    df = df.merge(total_df, on='match_id')
-    df = df[df['inning'] == 2]
-
-    df['current_score'] = df.groupby('match_id')['total_runs'].cumsum()
-    df['runs_left'] = df['target'] - df['current_score']
-    
-    balls_bowled = ((df['over'] - 1) * 6) + df['ball']
-    df['balls_left'] = (120 - balls_bowled).clip(lower=0)
-
-    df['player_dismissed'] = df['player_dismissed'].notna().astype(int)
-    df['wickets'] = df.groupby('match_id')['player_dismissed'].cumsum()
-    df['wickets'] = 10 - df['wickets']
-
-    overs_bowled = (df['over'] - 1) + (df['ball'] / 6)
-    df['crr'] = np.where(overs_bowled > 0, df['current_score'] / overs_bowled, 0.0)
-    df['rrr'] = np.where(df['balls_left'] > 0, (df['runs_left'] * 6) / df['balls_left'], 0.0)
-
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    df['result'] = np.where(df['batting_team'] == df['winner'], 1, 0)
-
-    final_df = df[['batting_team', 'bowling_team', 'city',
-                   'runs_left', 'balls_left', 'wickets',
-                   'target', 'crr', 'rrr', 'result']]
-    final_df.dropna(inplace=True)
-
-    X = final_df.drop('result', axis=1)
-    y = final_df['result']
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-
-    preprocessor = ColumnTransformer([
-        ('cat', OneHotEncoder(handle_unknown='ignore'), ['batting_team', 'bowling_team', 'city']),
-        ('num', 'passthrough', ['runs_left', 'balls_left', 'wickets', 'target', 'crr', 'rrr'])
-    ])
-
-    pipe = Pipeline([
-        ('preprocessor', preprocessor),
-        ('model', get_model(model_name))
-    ])
-
-    # Fit pipeline before evaluations to avoid UnboundLocalError
-    pipe.fit(X_train, y_train)
-    predictions = pipe.predict(X_test)
-
-    # Logging evaluations safely
-    try:
-        scores = cross_val_score(pipe, X_train, y_train, cv=5)
-        logging.info(f"Model trained: {model_name}")
-        logging.info(f"Cross Validation Scores: {scores}")
-        logging.info(f"Average CV Accuracy: {scores.mean():.4f}")
-        logging.info(f"Test Accuracy: {accuracy_score(y_test, predictions):.4f}")
-    except Exception as eval_error:
-        logging.warning(f"Evaluation failed: {eval_error}")
-
-    try:
-        joblib.dump(pipe, model_path)
-    except Exception as dump_error:
-        logging.error(f"Failed to dump model to {model_path}: {dump_error}")
-
-    return pipe
-
-@st.cache_resource
-def evaluate_model(model_name='logistic'):
-    pipe = train_model(model_name)
-
-    matches = pd.read_csv("matches.csv")
+    matches    = pd.read_csv("matches.csv")
     deliveries = pd.read_csv("deliveries.csv")
 
-    df = deliveries.merge(matches, left_on='match_id', right_on='id')
+    venue_chase_rates = compute_venue_chase_win_rate(matches)
+    toss_win_rates    = compute_toss_win_rate(matches)
 
-    total_df = df[df['inning'] == 1].groupby('match_id')['total_runs'].sum().reset_index()
-    total_df.rename(columns={'total_runs': 'target'}, inplace=True)
+    df = deliveries.merge(matches, left_on="match_id", right_on="id")
 
-    df = df.merge(total_df, on='match_id')
-    df = df[df['inning'] == 2]
-
-    df['current_score'] = df.groupby('match_id')['total_runs'].cumsum()
-    df['runs_left'] = df['target'] - df['current_score']
-    
-    balls_bowled = ((df['over'] - 1) * 6) + df['ball']
-    df['balls_left'] = (120 - balls_bowled).clip(lower=0)
-
-    df['player_dismissed'] = df['player_dismissed'].notna().astype(int)
-    df['wickets'] = df.groupby('match_id')['player_dismissed'].cumsum()
-    df['wickets'] = 10 - df['wickets']
-
-    overs_bowled = (df['over'] - 1) + (df['ball'] / 6)
-    df['crr'] = np.where(overs_bowled > 0, df['current_score'] / overs_bowled, 0.0)
-    df['rrr'] = np.where(df['balls_left'] > 0, (df['runs_left'] * 6) / df['balls_left'], 0.0)
-
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    df['result'] = np.where(df['batting_team'] == df['winner'], 1, 0)
-
-    final_df = df[['batting_team', 'bowling_team', 'city',
-                   'runs_left', 'balls_left', 'wickets',
-                   'target', 'crr', 'rrr', 'result']]
-    final_df.dropna(inplace=True)
-
-    X = final_df.drop('result', axis=1)
-    y = final_df['result']
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+    total_df = (
+        df[df["inning"] == 1]
+        .groupby("match_id")["total_runs"]
+        .sum()
+        .reset_index()
+        .rename(columns={"total_runs": "target"})
     )
+    df = df.merge(total_df, on="match_id")
+    df = df[df["inning"] == 2]
 
-    predictions = pipe.predict(X_test)
+    df["current_score"]    = df.groupby("match_id")["total_runs"].cumsum()
+    df["runs_left"]        = df["target"] - df["current_score"]
+    df["balls_left"]       = 120 - (df["over"] * 6 + df["ball"])
+    df["player_dismissed"] = df["player_dismissed"].notna().astype(int)
+    df["wickets"]          = 10 - df.groupby("match_id")["player_dismissed"].cumsum()
 
-    accuracy = accuracy_score(y_test, predictions)
-    precision = precision_score(y_test, predictions)
-    recall = recall_score(y_test, predictions)
-    f1 = f1_score(y_test, predictions)
+    balls_played   = (120 - df["balls_left"]).replace(0, 1)
+    df["crr"]      = (df["current_score"] * 6) / balls_played
+    df["rrr"]      = (df["runs_left"] * 6) / df["balls_left"]
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
-    tn, fp, fn, tp = confusion_matrix(y_test, predictions).ravel()
+    global_chase_avg = sum(venue_chase_rates.values()) / len(venue_chase_rates)
+    global_toss_avg  = sum(toss_win_rates.values())    / len(toss_win_rates)
+
+    df["venue_chase_win_rate"] = df["venue"].map(venue_chase_rates).fillna(global_chase_avg)
+    df["toss_win_rate"]        = df["venue"].map(toss_win_rates).fillna(global_toss_avg)
+    df["result"]               = np.where(df["batting_team"] == df["winner"], 1, 0)
+
+    final_df = df[[
+        "batting_team", "bowling_team", "city",
+        "runs_left", "balls_left", "wickets", "target", "crr", "rrr",
+        "venue_chase_win_rate", "toss_win_rate", "result",
+    ]].dropna()
+
+    X = final_df.drop("result", axis=1)
+    y = final_df["result"]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    preprocessor = ColumnTransformer([
+        ("cat", OneHotEncoder(handle_unknown="ignore"), ["batting_team", "bowling_team", "city"]),
+        ("num", "passthrough", ["runs_left", "balls_left", "wickets", "target", "crr", "rrr",
+                                "venue_chase_win_rate", "toss_win_rate"]),
+    ])
+
+    pipe = Pipeline([("preprocessor", preprocessor), ("model", get_model(model_name))])
 
     scores = cross_val_score(pipe, X_train, y_train, cv=5)
-    cv_mean = scores.mean()
-    cv_std = scores.std()
+    logging.info(f"CV Scores: {scores}  |  Avg: {scores.mean():.4f}")
 
-    return {
-        'accuracy': float(accuracy),
-        'precision': float(precision),
-        'recall': float(recall),
-        'f1': float(f1),
-        'tn': int(tn),
-        'fp': int(fp),
-        'fn': int(fn),
-        'tp': int(tp),
-        'cv_mean': float(cv_mean),
-        'cv_std': float(cv_std),
-        'cv_scores': scores.tolist()
-    }
+    pipe.fit(X_train, y_train)
+    acc = accuracy_score(y_test, pipe.predict(X_test))
+    logging.info(f"Test Accuracy: {acc:.4f}")
 
-selected_model_key = st.session_state.get('selected_model', 'logistic')
-pipe = train_model(selected_model_key)
+    joblib.dump({"pipe": pipe, "venue_chase_rates": venue_chase_rates, "toss_win_rates": toss_win_rates}, model_path)
+    return pipe, venue_chase_rates, toss_win_rates
 
-def generate_ball_by_ball_df(pipe, batting_team, bowling_team, selected_city, target, score, overs, wickets):
-    total_balls = int(overs * 6)
-    if total_balls == 0:
-        data = {
-            'over': [0],
-            'ball': [0],
-            'batting_team_prob': [0.5],
-            'bowling_team_prob': [0.5]
-        }
-        return pd.DataFrame(data)
 
-    records = []
-    for b in range(1, total_balls + 1):
-        curr_over = (b - 1) // 6 + 1
-        curr_ball = (b - 1) % 6 + 1
-        
-        fraction = b / total_balls
-        curr_score = int(score * fraction)
-        curr_wickets = int(wickets * fraction)
-        
-        runs_left = target - curr_score
-        balls_left = max(120 - b, 0)
-        crr = curr_score / (b / 6) if b > 0 else 0.0
-        rrr = (runs_left * 6) / balls_left if balls_left > 0 else 0.0
-        
-        input_df = pd.DataFrame({
-            'batting_team': [batting_team],
-            'bowling_team': [bowling_team],
-            'city': [selected_city],
-            'runs_left': [runs_left],
-            'balls_left': [balls_left],
-            'wickets': [10 - curr_wickets],
-            'target': [target],
-            'crr': [crr],
-            'rrr': [rrr]
-        })
-        
-        if runs_left <= 0:
-            win = 1.0
-            lose = 0.0
-        elif balls_left <= 0:
-            win = 0.0
-            lose = 1.0
-        else:
-            try:
-                proba = pipe.predict_proba(input_df)[0]
-                if np.isnan(proba).any():
-                    win, lose = 0.5, 0.5
-                else:
-                    win, lose = proba[1], proba[0]
-            except Exception:
-                win, lose = 0.5, 0.5
-            
-        records.append({
-            'over': curr_over,
-            'ball': curr_ball,
-            'batting_team_prob': round(win, 4),
-            'bowling_team_prob': round(lose, 4)
-        })
-        
-    return pd.DataFrame(records)
+pipe, venue_chase_rates, toss_win_rates = train_model()
 
-def safe_calculate_rates(score, target, overs):
-    runs_left = target - score
-    balls_left = max(120 - (overs * 6), 0)
-    crr = score / overs if overs > 0 else 0.0
-    rrr = (runs_left * 6) / balls_left if balls_left > 0 else 0.0
-    return runs_left, balls_left, crr, rrr
+matches_df          = pd.read_csv("matches.csv")
+venue_list          = sorted(matches_df["venue"].dropna().unique().tolist())
+city_list           = sorted(matches_df["city"].dropna().unique().tolist())
+team_toss_win_rates = compute_team_toss_win_rate(matches_df)
 
-# -----------------------------------
+
+# ─────────────────────────────────────────────
 # SIDEBAR
-# -----------------------------------
+# ─────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("""
+    st.markdown(
+        """
         <div class="sidebar-brand">
             <span class="sidebar-logo-text">CRICSCOPE</span>
             <span class="sidebar-tagline">Match Intelligence Platform</span>
         </div>
-    """, unsafe_allow_html=True)
-    
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown('<div class="sidebar-section-label">Navigation</div>', unsafe_allow_html=True)
 
-    if st.button("◈  Dashboard", key="nav_dash"):
-        st.session_state.page = "Dashboard"
+    if st.button("◈  Dashboard",     key="nav_dash"):     st.session_state.page = "Dashboard"
+    if st.button("◉  Match Analysis", key="nav_analysis"): st.session_state.page = "Analysis"
 
-    if st.button("◉  Match Analysis", key="nav_analysis"):
-        st.session_state.page = "Analysis"
-
-    if st.button("⚖  Model Performance", key="nav_performance"):
-        st.session_state.page = "Performance"
-
-    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-section-label">Model Configuration</div>', unsafe_allow_html=True)
-
-    model_options = {
-        "Logistic Regression": "logistic",
-        "Random Forest": "random_forest",
-        "XGBoost": "xgboost"
-    }
-
-    selected_model_name = st.selectbox(
-        "Choose Prediction Model",
-        options=list(model_options.keys()),
-        index=list(model_options.values()).index(st.session_state.selected_model),
-        key="selected_model_widget"
-    )
-    st.session_state.selected_model = model_options[selected_model_name]
-
-    st.markdown('<div style="height:1px; background:rgba(212,175,55,0.08); margin:20px 0;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:1px;background:rgba(212,175,55,0.08);margin:16px 0;"></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-label">Built By</div>', unsafe_allow_html=True)
 
     st.markdown(
-        '<div class="profile-section">'
-        '<div class="profile-card">'
-        '<div class="profile-avatar">AS</div>'
-        '<div class="profile-name">Arnav Singh</div>'
-        '<div class="profile-role">ML &middot; Data &middot; Analytics</div>'
-        '</div>'
-        '<div class="contact-card">'
-        '<a href="mailto:itsarnav.singh80@gmail.com" class="profile-link">'
-        '<span class="profile-link-icon">&#9993;</span>'
-        '<span class="profile-link-text">itsarnav.singh80@gmail.com</span>'
-        '</a>'
-        '<a href="https://www.linkedin.com/in/arnav-singh-a87847351" target="_blank" class="profile-link">'
-        '<span class="profile-link-icon">in</span>'
-        '<span class="profile-link-text">linkedin.com/in/arnav-singh</span>'
-        '</a>'
-        '<a href="https://github.com/Arnav-Singh-5080" target="_blank" class="profile-link">'
-        '<span class="profile-link-icon">&#9670;</span>'
-        '<span class="profile-link-text">Arnav-Singh-5080</span>'
-        '</a>'
-        '</div>'
-        '</div>'
-        '<div class="sidebar-version">CricScope v2.0 &middot; IPL Edition</div>',
-        unsafe_allow_html=True
+        """
+        <div style="padding:0 18px 8px;">
+            <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(212,175,55,0.12);border-radius:16px;padding:20px 18px 14px;position:relative;overflow:hidden;">
+                <div style="position:absolute;top:0;left:0;right:0;height:60px;background:radial-gradient(ellipse at 50% 0%,rgba(212,175,55,0.08) 0%,transparent 70%);pointer-events:none;"></div>
+                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#c9a227,#f0d060);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#0a0800;margin-bottom:12px;box-shadow:0 0 18px rgba(212,175,55,0.25);">AS</div>
+                <div style="font-size:17px;font-weight:600;color:#f0e8cc;letter-spacing:0.5px;margin-bottom:3px;">Arnav Singh</div>
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:rgba(212,175,55,0.4);margin-bottom:18px;font-weight:500;">ML · Data · Analytics</div>
+                <div style="height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,0.15),transparent);margin-bottom:12px;"></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-# -----------------------------------
+    st.markdown(
+        """
+        <div style="padding:0 18px;">
+            <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(212,175,55,0.12);border-top:none;border-radius:0 0 16px 16px;padding:4px 10px 14px;">
+                <p style="margin:0 0 2px;padding:8px 8px;">
+                    <span style="color:rgba(212,175,55,0.6);margin-right:8px;font-size:12px;">✉</span>
+                    <a href="mailto:itsarnav.singh80@gmail.com" style="color:rgba(200,185,140,0.6);font-size:11px;text-decoration:none;">itsarnav.singh80@gmail.com</a>
+                </p>
+                <p style="margin:0 0 2px;padding:8px 8px;">
+                    <span style="color:rgba(212,175,55,0.6);margin-right:8px;font-size:12px;">in</span>
+                    <a href="https://www.linkedin.com/in/arnav-singh-a87847351" target="_blank" style="color:rgba(200,185,140,0.6);font-size:11px;text-decoration:none;">linkedin.com/in/arnav-singh</a>
+                </p>
+                <p style="margin:0;padding:8px 8px;">
+                    <span style="color:rgba(212,175,55,0.6);margin-right:8px;font-size:12px;">&#9670;</span>
+                    <a href="https://github.com/Arnav-Singh-5080" target="_blank" style="color:rgba(200,185,140,0.6);font-size:11px;text-decoration:none;">Arnav-Singh-5080</a>
+                </p>
+            </div>
+        </div>
+        <div style="text-align:center;margin-top:16px;padding-bottom:24px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(200,185,140,0.18);">
+            CricScope v2.0 · IPL Edition
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ─────────────────────────────────────────────
 # DASHBOARD PAGE
-# -----------------------------------
+# ─────────────────────────────────────────────
 if st.session_state.page == "Dashboard":
     if "selected_team" not in st.session_state:
        st.session_state.selected_team = None
 
-    st.markdown("""
+    st.markdown(
+        """
         <div class="hero-wrapper">
             <div class="hero-eyebrow">IPL Match Intelligence · Season 2025</div>
-            <div class="hero-badge">
-                <div class="hero-dot"></div>
-                Live Predictions Active
-            </div>
+            <div class="hero-badge"><div class="hero-dot"></div>Live Predictions Active</div>
             <div class="hero-title">CricScope</div>
-            <div class="hero-subtitle">
-                Precision match analytics engineered for modern cricket.
-                Real-time win probability powered by machine learning.
-            </div>
+            <div class="hero-subtitle">Precision match analytics engineered for modern cricket. Real-time win probability powered by machine learning.</div>
         </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown("""
+    st.markdown(
+        """
         <div class="stats-row">
-            <div class="stat-pill">
-                <div class="stat-value">8</div>
-                <div class="stat-label">IPL Teams</div>
-            </div>
-            <div class="stat-pill">
-                <div class="stat-value">ML</div>
-                <div class="stat-label">Model Type</div>
-            </div>
-            <div class="stat-pill">
-                <div class="stat-value">120</div>
-                <div class="stat-label">Balls Tracked</div>
-            </div>
-            <div class="stat-pill">
-                <div class="stat-value">6+</div>
-                <div class="stat-label">Key Signals</div>
-            </div>
+            <div class="stat-pill"><div class="stat-value">8</div><div class="stat-label">IPL Teams</div></div>
+            <div class="stat-pill"><div class="stat-value">ML</div><div class="stat-label">Model Type</div></div>
+            <div class="stat-pill"><div class="stat-value">120</div><div class="stat-label">Balls Tracked</div></div>
+            <div class="stat-pill"><div class="stat-value">8+</div><div class="stat-label">Key Signals</div></div>
         </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown("""
         <div style="padding: 48px 72px;">
@@ -1277,265 +1061,85 @@ if st.session_state.page == "Dashboard":
 
     team_cols = st.columns(4)
     for i, (team_name, tdata) in enumerate(team_data.items()):
+        tc     = tdata["color"]
+        abbr   = tdata["abbr"]
+        logo   = tdata["logo"]
         with team_cols[i % 4]:
-            st.markdown(f"""
-                <div style="
-                    background:rgba(255,255,255,0.025);
-                    border:1px solid rgba(255,255,255,0.07);
-                    border-radius:16px;
-                    padding:20px;
-                    text-align:center;
-                    transition:all 0.25s ease;
-                    margin-bottom:12px;
-                ">
-                    <div style="width:72px;height:72px;border-radius:50%;margin:0 auto;
-                                overflow:hidden;background:#111;
-                                box-shadow:0 0 20px {tdata['color']}50;
-                                display:flex;align-items:center;justify-content:center;">
-                        <img src="{tdata['logo']}"
-                             style="width:100%;height:100%;object-fit:cover;
-                                    mix-blend-mode:screen;border-radius:50%;" />
-                    </div>
-                    <div style="font-family:'Cormorant Garamond',serif; font-size:18px; font-weight:600;
-                                color:{tdata['color']}; letter-spacing:2px; margin-top:12px;">
-                        {tdata['abbr']}
-                    </div>
-                    <div style="font-size:10px; color:rgba(200,185,140,0.35); margin-top:4px;
-                                letter-spacing:0.5px;">
-                        {team_name}
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            if st.button(f"View {tdata['abbr']} Analysis", key=f"team_{i}"):
-                 st.session_state.selected_team = team_name
-                 st.session_state.page = "Team Analysis"
-                 st.rerun()
+            st.markdown(
+                f'<div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:20px;text-align:center;margin-bottom:12px;">'
+                f'<div style="width:72px;height:72px;border-radius:50%;margin:0 auto;overflow:hidden;background:#111;box-shadow:0 0 20px {tc}50;display:flex;align-items:center;justify-content:center;">'
+                f'<img src="{logo}" style="width:100%;height:100%;object-fit:cover;mix-blend-mode:screen;border-radius:50%;" /></div>'
+                f'<div style="font-family:\'Cormorant Garamond\',serif;font-size:18px;font-weight:600;color:{tc};letter-spacing:2px;margin-top:12px;">{abbr}</div>'
+                f'<div style="font-size:10px;color:rgba(200,185,140,0.35);margin-top:4px;">{team_name}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-    st.markdown("""
-        <div style="padding:0 72px 32px; text-align:center;">
-            <div style="display:inline-block; background:rgba(212,175,55,0.06); border:1px solid rgba(212,175,55,0.15);
-                        border-radius:14px; padding:20px 36px;">
-                <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
-                            color:rgba(212,175,55,0.5);margin-bottom:8px;">Get Started</div>
-                <div style="font-family:'Cormorant Garamond',serif;font-size:20px;color:#f0e8cc;font-weight:500;">
-                    Open Match Analysis from the sidebar →
-                </div>
+    st.markdown(
+        """
+        <div style="padding:0 60px 32px;text-align:center;">
+            <div style="display:inline-block;background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.15);border-radius:14px;padding:20px 36px;">
+                <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(212,175,55,0.5);margin-bottom:8px;">Get Started</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-size:20px;color:#f0e8cc;font-weight:500;">Open Match Analysis from the sidebar →</div>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
-# -----------------------------------
-# MODEL PERFORMANCE PAGE
-# -----------------------------------
-elif st.session_state.page == "Performance":
 
-    st.markdown("""
-        <div class="hero-wrapper" style="padding-bottom:32px;">
-            <div class="hero-eyebrow">Classifier Diagnostic Metrics</div>
-            <div class="hero-title" style="font-size:clamp(36px,4vw,56px); margin-bottom:10px;">Model Report</div>
-            <div class="hero-subtitle">Comprehensive performance metrics, cross-validation scoring, and visual confusion matrix for the active model.</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown('<div class="main-pad">', unsafe_allow_html=True)
-    st.markdown('<div style="height:24px;"></div>', unsafe_allow_html=True)
-
-    with st.spinner("Analyzing active model parameters..."):
-        metrics = evaluate_model(st.session_state.selected_model)
-
-    # Convert model key to readable label
-    model_name_map = {
-        "logistic": "Logistic Regression",
-        "random_forest": "Random Forest",
-        "xgboost": "XGBoost"
-    }
-    active_model_name = model_name_map.get(st.session_state.selected_model, "Logistic Regression")
-
-    # Metrics Row
-    col_m1, col_m2, col_m3 = st.columns(3, gap="medium")
-    
-    with col_m1:
-        st.markdown(f"""
-            <div class="stat-pill">
-                <div class="stat-value">{metrics['accuracy']:.2%}</div>
-                <div class="stat-label">Test Accuracy</div>
-                <div style="font-size:11px; color:rgba(220,210,185,0.45); margin-top:8px; line-height:1.4;">
-                    Percentage of correct predictions on unseen test split data.
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    with col_m2:
-        st.markdown(f"""
-            <div class="stat-pill">
-                <div class="stat-value">{metrics['cv_mean']:.2%}</div>
-                <div class="stat-label">5-Fold CV Mean Accuracy</div>
-                <div style="font-size:11px; color:rgba(220,210,185,0.45); margin-top:8px; line-height:1.4;">
-                    Average validation score across 5 stratified folds. (SD: &plusmn;{metrics['cv_std']:.2%})
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    with col_m3:
-        st.markdown(f"""
-            <div class="stat-pill">
-                <div class="stat-value">{metrics['f1']:.2%}</div>
-                <div class="stat-label">F1-Score</div>
-                <div style="font-size:11px; color:rgba(220,210,185,0.45); margin-top:8px; line-height:1.4;">
-                    Harmonic mean of precision and recall. Robust measure of model accuracy.
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown('<div style="height:32px;"></div>', unsafe_allow_html=True)
-
-    # Detailed Analysis Columns
-    col_det, col_cm = st.columns([1.1, 1.3], gap="medium")
-    
-    with col_det:
-        st.markdown(f"""
-            <div class="input-card" style="height: 100%;">
-                <div class="input-label" style="font-size:11px;">Evaluation Deep Dive</div>
-                <div style="margin-bottom: 24px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <span style="font-family:'Cormorant Garamond',serif; font-size:20px; color:#f0e8cc; font-weight:500;">Precision</span>
-                        <span style="font-family:'DM Mono',monospace; font-size:22px; color:#d4af37; font-weight:500;">{metrics['precision']:.2%}</span>
-                    </div>
-                    <p style="font-size:13px; color:rgba(220,210,185,0.5); line-height:1.5; margin:0;">
-                        Out of all matches the model predicted as a win, how many were actual wins? High precision minimizes false positives.
-                    </p>
-                </div>
-                <div style="margin-bottom: 24px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <span style="font-family:'Cormorant Garamond',serif; font-size:20px; color:#f0e8cc; font-weight:500;">Recall (Sensitivity)</span>
-                        <span style="font-family:'DM Mono',monospace; font-size:22px; color:#d4af37; font-weight:500;">{metrics['recall']:.2%}</span>
-                    </div>
-                    <p style="font-size:13px; color:rgba(220,210,185,0.5); line-height:1.5; margin:0;">
-                        Out of all actual wins that occurred in the dataset, how many did the model correctly identify? High recall minimizes false negatives.
-                    </p>
-                </div>
-                <div>
-                    <div style="font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:rgba(212,175,55,0.35); margin-bottom:6px;">Model Settings</div>
-                    <div style="font-family:'DM Mono',monospace; font-size:12px; color:rgba(220,210,185,0.6); background:rgba(0,0,0,0.2); padding:10px 14px; border-radius:8px; border:1px solid rgba(212,175,55,0.06); line-height:1.5;">
-                        Active Classifier: {active_model_name}<br>
-                        CV Strategy: 5-Fold Stratified K-Fold
-                    </div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    with col_cm:
-        st.markdown(f"""
-            <div class="matrix-wrapper">
-                <div class="input-label" style="font-size:11px; margin-bottom: 8px;">Confusion Matrix</div>
-                <div style="font-size:12px; color:rgba(220,210,185,0.45); margin-bottom: 20px; line-height:1.4;">
-                    A tabular layout visualizing classification hits and misses. Gold-bordered diagonal cells represent correct predictions.
-                </div>
-                <div class="matrix-grid">
-                    <div class="matrix-header">Actual \\ Pred</div>
-                    <div class="matrix-header">Bowl Win (0)</div>
-                    <div class="matrix-header">Bat Win (1)</div>
-                    
-                    <div class="matrix-label">Bowl Win (0)</div>
-                    <div class="matrix-cell correct">
-                        <div class="matrix-value">{metrics['tn']:,}</div>
-                        <div class="matrix-cell-lbl">True Neg</div>
-                    </div>
-                    <div class="matrix-cell incorrect">
-                        <div class="matrix-value">{metrics['fp']:,}</div>
-                        <div class="matrix-cell-lbl">False Pos</div>
-                    </div>
-                    
-                    <div class="matrix-label">Bat Win (1)</div>
-                    <div class="matrix-cell incorrect">
-                        <div class="matrix-value">{metrics['fn']:,}</div>
-                        <div class="matrix-cell-lbl">False Neg</div>
-                    </div>
-                    <div class="matrix-cell correct">
-                        <div class="matrix-value">{metrics['tp']:,}</div>
-                        <div class="matrix-cell-lbl">True Pos</div>
-                    </div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # Fold scores display
-    st.markdown('<div style="height:32px;"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="input-label" style="font-size:11px; margin-bottom: 12px; padding-left: 4px;">Stratified 5-Fold Scores</div>', unsafe_allow_html=True)
-    
-    cv_cols = st.columns(5)
-    for idx, score in enumerate(metrics['cv_scores']):
-        with cv_cols[idx]:
-            st.markdown(f"""
-                <div style="background:rgba(255,255,255,0.015); border:1px solid rgba(255,255,255,0.05);
-                            border-radius:10px; padding:12px; text-align:center;">
-                    <div style="font-size:9px; letter-spacing:1px; text-transform:uppercase; color:rgba(220,210,185,0.35); margin-bottom:4px;">Fold {idx+1}</div>
-                    <div style="font-family:'DM Mono',monospace; font-size:15px; color:#e8d89a; font-weight:500;">{score:.2%}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# -----------------------------------
+# ─────────────────────────────────────────────
 # ANALYSIS PAGE
-# -----------------------------------
+# ─────────────────────────────────────────────
 if st.session_state.page == "Analysis":
 
-    st.markdown("""
+    st.markdown(
+        """
         <div class="hero-wrapper" style="padding-bottom:32px;">
             <div class="hero-eyebrow">Win Probability Engine</div>
-            <div class="hero-title" style="font-size:clamp(36px,4vw,56px); margin-bottom:10px;">Match Analysis</div>
+            <div class="hero-title" style="font-size:clamp(36px,4vw,56px);margin-bottom:10px;">Match Analysis</div>
             <div class="hero-subtitle">Configure the match state below to compute real-time win probabilities.</div>
         </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown('<div class="main-pad">', unsafe_allow_html=True)
     st.markdown('<div style="height:32px;"></div>', unsafe_allow_html=True)
 
     teams = list(team_data.keys())
 
-    # ---- INPUT SECTION ----
-    st.markdown("""
-        <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;
-                    color:rgba(212,175,55,0.4);margin-bottom:20px;font-weight:500;">
-            Match Configuration
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(212,175,55,0.4);margin-bottom:20px;font-weight:500;">Match Configuration</div>',
+        unsafe_allow_html=True,
+    )
 
     col1, col2 = st.columns([1.2, 1.2], gap="medium")
 
     with col1:
         st.markdown('<div class="input-card">', unsafe_allow_html=True)
-        st.markdown('<div class="input-label">Teams</div>', unsafe_allow_html=True)
-        batting_team = st.selectbox("Batting Team", teams, key="bat")
-        bowling_team = st.selectbox("Bowling Team", [t for t in teams if t != batting_team], key="bowl")
-        cities = [
-            'Abu Dhabi', 'Ahmedabad', 'Bangalore', 'Bengaluru', 'Bloemfontein', 
-            'Cape Town', 'Centurion', 'Chandigarh', 'Chennai', 'Cuttack', 
-            'Delhi', 'Dharamsala', 'Durban', 'East London', 'Hyderabad', 
-            'Indore', 'Jaipur', 'Johannesburg', 'Kanpur', 'Kimberley', 
-            'Kochi', 'Kolkata', 'Mohali', 'Mumbai', 'Nagpur', 
-            'Port Elizabeth', 'Pune', 'Raipur', 'Rajkot', 'Ranchi', 
-            'Sharjah', 'Visakhapatnam'
-        ]
-        selected_city = st.selectbox("Select Host City", cities, index=cities.index('Mumbai'), key="city")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('<div class="input-label">Teams &amp; Venue</div>', unsafe_allow_html=True)
+        batting_team = st.selectbox("Batting Team",  teams, key="bat")
+        bowling_team = st.selectbox("Bowling Team",  [t for t in teams if t != batting_team], key="bowl")
+        city         = st.selectbox("City",          city_list,  key="city")
+        venue        = st.selectbox("Venue",         venue_list, key="venue")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown('<div class="input-card">', unsafe_allow_html=True)
         st.markdown('<div class="input-label">Match State</div>', unsafe_allow_html=True)
-        target = st.number_input("Target Score", min_value=50, max_value=300, value=180, step=1)
-        score = st.number_input("Current Score", min_value=0, max_value=target - 1, value=50, step=1)
+        target  = st.number_input("Target Score",    min_value=50, max_value=300,        value=180, step=1)
+        score   = st.number_input("Current Score",   min_value=0,  max_value=target - 1, value=50,  step=1)
         col_ov, col_wk = st.columns(2)
         with col_ov:
             overs = st.slider("Overs Completed", min_value=0, max_value=20, value=10)
         with col_wk:
             wickets = st.number_input("Wickets Fallen", min_value=0, max_value=9, value=2)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
 
-    # ---- TEAM VS DISPLAY ----
+    # ── pre-compute all context values ──────────────────────────────────────
     t1 = team_data[batting_team]
     if bowling_team in team_data:
         t2 = team_data[bowling_team]
@@ -1606,27 +1210,100 @@ if st.session_state.page == "Analysis":
             </div>
         """, unsafe_allow_html=True)
 
-    st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+    chase_rate   = venue_chase_rates.get(venue, 0.5)
+    toss_rate    = toss_win_rates.get(venue, 0.5)
+    bat_toss     = team_toss_win_rates.get(batting_team, 0.5)
+    bowl_toss    = team_toss_win_rates.get(bowling_team, 0.5)
 
-    # ---- ANALYZE BUTTON ----
+    venue_style  = get_venue_batting_style(venue_chase_rates).get(
+        venue, {"style": "Neutral", "confidence": "Toss Up", "rate": 0.5}
+    )
+
+    chase_pct      = round(chase_rate * 100)
+    toss_pct       = round(toss_rate  * 100)
+    bat_toss_pct   = round(bat_toss   * 100)
+    bowl_toss_pct  = round(bowl_toss  * 100)
+    venue_short    = venue.split(" ")[0]
+    t1_abbr        = t1["abbr"]
+    t2_abbr        = t2["abbr"]
+    t1_color       = t1["color"]
+    t2_color       = t2["color"]
+    style_label    = venue_style["style"]
+    style_conf     = venue_style["confidence"]
+    style_rate_pct = round(venue_style["rate"] * 100)
+    style_color    = (
+        "#4ade80" if style_label == "Chase"
+        else "#f87171" if style_label == "Bat First"
+        else "#e8d89a"
+    )
+
+    # ── venue context cards ──────────────────────────────────────────────────
+    st.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
+
+    card_base = "background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px 18px;min-height:110px;display:flex;flex-direction:column;justify-content:center;"
+    lbl_style = "font-size:9px;letter-spacing:2px;text-transform:uppercase;color:rgba(212,175,55,0.35);margin-bottom:8px;"
+    val_base  = "font-family:'DM Mono',monospace;font-size:26px;line-height:1;"
+    sub_style = "font-size:9px;color:rgba(200,185,140,0.35);margin-top:8px;"
+
+    cards_html = (
+        f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;width:100%;margin-bottom:8px;">'
+
+        f'<div style="{card_base}">'
+        f'<div style="{lbl_style}">Chase Win Rate · {venue_short}</div>'
+        f'<div style="{val_base}color:#e8d89a;">{chase_pct}%</div>'
+        f'</div>'
+
+        f'<div style="{card_base}">'
+        f'<div style="{lbl_style}">Toss → Win Rate · {venue_short}</div>'
+        f'<div style="{val_base}color:#e8d89a;">{toss_pct}%</div>'
+        f'</div>'
+
+        f'<div style="{card_base}">'
+        f'<div style="{lbl_style}">{t1_abbr} Toss → Win</div>'
+        f'<div style="{val_base}color:{t1_color};">{bat_toss_pct}%</div>'
+        f'</div>'
+
+        f'<div style="{card_base}">'
+        f'<div style="{lbl_style}">{t2_abbr} Toss → Win</div>'
+        f'<div style="{val_base}color:{t2_color};">{bowl_toss_pct}%</div>'
+        f'</div>'
+
+        f'<div style="{card_base}">'
+        f'<div style="{lbl_style}">{venue_short} · Batting Style</div>'
+        f'<div style="font-family:\'DM Mono\',monospace;font-size:22px;color:{style_color};line-height:1;">{style_label}</div>'
+        f'<div style="{sub_style}">{style_conf} · {style_rate_pct}% chase wins</div>'
+        f'</div>'
+
+        f'</div>'
+    )
+    st.markdown(cards_html, unsafe_allow_html=True)
+
+    st.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
+
+    # ── analyse button ───────────────────────────────────────────────────────
     st.markdown('<div class="analyze-btn">', unsafe_allow_html=True)
     analyze = st.button("Run Analysis", key="analyze_btn", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- PREDICTION OUTPUT ----
+    # ── prediction output ────────────────────────────────────────────────────
     if analyze:
-        runs_left, balls_left, crr, rrr = safe_calculate_rates(score, target, overs)
+        runs_left  = target - score
+        balls_left = 120 - (overs * 6)
+        crr        = score / overs if overs > 0 else 0
+        rrr        = (runs_left * 6) / balls_left if balls_left > 0 else 0
 
         input_df = pd.DataFrame({
-            'batting_team': [batting_team],
-            'bowling_team': [bowling_team],
-            'city': [selected_city],
-            'runs_left': [runs_left],
-            'balls_left': [balls_left],
-            'wickets': [10 - wickets],
-            'target': [target],
-            'crr': [crr],
-            'rrr': [rrr]
+            "batting_team":         [batting_team],
+            "bowling_team":         [bowling_team],
+            "city":                 [city],
+            "runs_left":            [runs_left],
+            "balls_left":           [balls_left],
+            "wickets":              [10 - wickets],
+            "target":               [target],
+            "crr":                  [crr],
+            "rrr":                  [rrr],
+            "venue_chase_win_rate": [chase_rate],
+            "toss_win_rate":        [toss_rate],
         })
 
         # ---- VALIDATION LAYER (Issue #118) ----
@@ -1685,12 +1362,10 @@ if st.session_state.page == "Analysis":
                 lose = proba[0]
 
         st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
-        st.markdown("""
-            <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;
-                        color:rgba(212,175,55,0.4);margin-bottom:16px;font-weight:500;">
-                Prediction Output
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            '<div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(212,175,55,0.4);margin-bottom:16px;font-weight:500;">Prediction Output</div>',
+            unsafe_allow_html=True,
+        )
 
         if is_match_decided:
             if verdict_type == "success":
@@ -1703,85 +1378,50 @@ if st.session_state.page == "Analysis":
 
         res_col1, res_col2 = st.columns([1.1, 1.1], gap="medium")
 
+        # pre-compute display values
+        bat_pct  = round(win  * 100)
+        bowl_pct = round(lose * 100)
+        crr_fmt  = round(crr, 2)
+        rrr_fmt  = round(rrr, 2)
+        in_hand  = 10 - wickets
+        t1_name  = batting_team
+        t2_name  = bowling_team
+
         with res_col1:
-            bat_pct = round(win * 100)
-            st.markdown(f"""
-                <div class="prediction-card">
-                    <div class="prediction-label">Batting Team · {t1['abbr']}</div>
-                    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;
-                                font-weight:500;color:#c8b870;margin-bottom:16px;">
-                        {batting_team}
-                    </div>
-                    <div class="win-probability">{bat_pct}%</div>
-                    <div class="win-prob-label">Win Probability</div>
-                    <div class="prob-bar-track">
-                        <div class="prob-bar-fill" style="width:{bat_pct}%;"></div>
-                    </div>
-                    <div class="prob-bar-labels">
-                        <span>0%</span><span>{bat_pct}%</span><span>100%</span>
-                    </div>
-                    <div class="metrics-row">
-                        <div class="metric-chip">
-                            <div class="metric-chip-value">{score}</div>
-                            <div class="metric-chip-label">Score</div>
-                        </div>
-                        <div class="metric-chip">
-                            <div class="metric-chip-value">{runs_left}</div>
-                            <div class="metric-chip-label">Needed</div>
-                        </div>
-                        <div class="metric-chip">
-                            <div class="metric-chip-value">{balls_left}</div>
-                            <div class="metric-chip-label">Balls Left</div>
-                        </div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="prediction-card">'
+                f'<div class="prediction-label">Batting Team · {t1_abbr}</div>'
+                f'<div style="font-family:\'Cormorant Garamond\',serif;font-size:22px;font-weight:500;color:#c8b870;margin-bottom:16px;">{t1_name}</div>'
+                f'<div class="win-probability">{bat_pct}%</div>'
+                f'<div class="win-prob-label">Win Probability</div>'
+                f'<div class="prob-bar-track"><div class="prob-bar-fill" style="width:{bat_pct}%;"></div></div>'
+                f'<div class="prob-bar-labels"><span>0%</span><span>{bat_pct}%</span><span>100%</span></div>'
+                f'<div class="metrics-row">'
+                f'<div class="metric-chip"><div class="metric-chip-value">{score}</div><div class="metric-chip-label">Score</div></div>'
+                f'<div class="metric-chip"><div class="metric-chip-value">{runs_left}</div><div class="metric-chip-label">Needed</div></div>'
+                f'<div class="metric-chip"><div class="metric-chip-value">{balls_left}</div><div class="metric-chip-label">Balls Left</div></div>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
         with res_col2:
-            bowl_pct = round(lose * 100)
-            st.markdown(f"""
-                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);
-                            border-radius:24px;padding:36px 32px;position:relative;overflow:hidden;">
-                    <div class="prediction-label">Bowling Team · {t2['abbr']}</div>
-                    <div style="font-family:'Cormorant Garamond',serif;font-size:22px;
-                                font-weight:500;color:#c8b870;margin-bottom:16px;">
-                        {bowling_team}
-                    </div>
-                    <div style="font-family:'DM Mono',monospace;font-size:72px;font-weight:500;
-                                color:rgba(200,185,140,0.55);line-height:1;margin-bottom:4px;">
-                        {bowl_pct}%
-                    </div>
-                    <div class="win-prob-label">Win Probability</div>
-                    <div class="prob-bar-track">
-                        <div style="height:100%;border-radius:100px;
-                                    background:rgba(200,185,140,0.2);
-                                    width:{bowl_pct}%;transition:width 0.8s ease;"></div>
-                    </div>
-                    <div class="prob-bar-labels">
-                        <span>0%</span><span>{bowl_pct}%</span><span>100%</span>
-                    </div>
-                    <div class="metrics-row">
-                        <div class="metric-chip">
-                            <div class="metric-chip-value">{round(crr, 2)}</div>
-                            <div class="metric-chip-label">CRR</div>
-                        </div>
-                        <div class="metric-chip">
-                            <div class="metric-chip-value">{round(rrr, 2)}</div>
-                            <div class="metric-chip-label">RRR</div>
-                        </div>
-                        <div class="metric-chip">
-                            <div class="metric-chip-value">{10 - wickets}</div>
-                            <div class="metric-chip-label">In Hand</div>
-                        </div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        # ---- SUMMARY ROW ----
-        st.markdown('<div style="height:16px;"></div>', unsafe_allow_html=True)
-        verdict = batting_team if win > 0.5 else bowling_team
-        conf = max(win, lose)
-        conf_label = "High" if conf > 0.75 else "Moderate" if conf > 0.55 else "Close"
+            st.markdown(
+                f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:24px;padding:36px 32px;position:relative;overflow:hidden;">'
+                f'<div class="prediction-label">Bowling Team · {t2_abbr}</div>'
+                f'<div style="font-family:\'Cormorant Garamond\',serif;font-size:22px;font-weight:500;color:#c8b870;margin-bottom:16px;">{t2_name}</div>'
+                f'<div style="font-family:\'DM Mono\',monospace;font-size:72px;font-weight:500;color:rgba(200,185,140,0.55);line-height:1;margin-bottom:4px;">{bowl_pct}%</div>'
+                f'<div class="win-prob-label">Win Probability</div>'
+                f'<div class="prob-bar-track"><div style="height:100%;border-radius:100px;background:rgba(200,185,140,0.2);width:{bowl_pct}%;transition:width 0.8s ease;"></div></div>'
+                f'<div class="prob-bar-labels"><span>0%</span><span>{bowl_pct}%</span><span>100%</span></div>'
+                f'<div class="metrics-row">'
+                f'<div class="metric-chip"><div class="metric-chip-value">{crr_fmt}</div><div class="metric-chip-label">CRR</div></div>'
+                f'<div class="metric-chip"><div class="metric-chip-value">{rrr_fmt}</div><div class="metric-chip-label">RRR</div></div>'
+                f'<div class="metric-chip"><div class="metric-chip-value">{in_hand}</div><div class="metric-chip-label">In Hand</div></div>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
         st.markdown(f"""
             <div style="background:rgba(212,175,55,0.03);border:1px solid rgba(212,175,55,0.1);
