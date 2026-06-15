@@ -1,5 +1,8 @@
 import streamlit as st
-from langchain_groq import ChatGroq
+try:
+    from langchain_groq import ChatGroq
+except ImportError:
+    ChatGroq = None
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -43,18 +46,62 @@ RESPONSE STYLE:
 
 
 @st.cache_resource
+@st.cache_resource
 def get_chain():
     """
     Build and cache the LCEL chain:
         prompt | llm | output_parser
+
     Cached so the LLM isn't re-instantiated on every Streamlit rerun.
     """
+
+    if ChatGroq is None:
+        raise RuntimeError(
+            "langchain-groq is not installed.\n"
+            "Run:\n"
+            "pip install langchain-groq"
+        )
+
     try:
         api_key = st.secrets["groq"]["key"]
-    except KeyError:
-        raise RuntimeError(
-            "Groq API key missing.\n"
+
+    except Exception:
+        st.error("⚠️ Groq API key not found.")
+
+        st.info(
+            "Create .streamlit/secrets.toml"
         )
+
+        st.code(
+            """
+[groq]
+key = "YOUR_GROQ_API_KEY"
+"""
+        )
+
+        st.stop()
+
+    if not api_key:
+        st.error("⚠️ Empty Groq API key.")
+        st.stop()
+
+    llm = ChatGroq(
+        groq_api_key=api_key,
+        model_name="llama-3.1-8b-instant",
+        temperature=0.7,
+        max_tokens=1024,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM_PROMPT),
+        MessagesPlaceholder(variable_name="history"),
+        ("human", "{question}"),
+    ])
+
+    chain = prompt | llm | StrOutputParser()
+
+    return chain
+    
 
     llm = ChatGroq(
         groq_api_key=api_key,

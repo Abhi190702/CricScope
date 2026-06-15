@@ -2544,7 +2544,13 @@ if st.session_state.page == "chabot":
         last_msg = st.session_state.chat_messages[-1]
 
         if last_msg["role"] == "user":
-            from cricket_agent import run_agent
+            try:
+                from cricket_agent import run_agent
+                chatbot_available = True
+
+            except Exception as e:
+                chatbot_available = False
+                chatbot_error = str(e)
             try:
                 response_text = run_agent(
                     user_message=last_msg["content"],

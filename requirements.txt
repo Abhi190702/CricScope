@@ -10,3 +10,5 @@ xgboost
 requests
 voice_input
 groq
+langchain-groq
+python-dotenv
