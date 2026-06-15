@@ -61,25 +61,6 @@
 
 ---
 
-## 📑 Table of Contents
-
-- [What is CricScope?](#what-is-cricscope)
-- [📚 Documentation](#-documentation)
-- [Architecture](#architecture)
-- [Model Evaluation Metrics](#model-evaluation-metrics)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Open Source Programs 2026](#open-source-programs-2026)
-- [Why Contribute?](#why-contribute)
-- [Contribution Guide](#contribution-guide)
-- [Security Policy](#-security-policy)
-- [Code of Conduct](#-code-of-conduct)
-- [Project Admin](#project-admin)
-- [Support the Project](#support-the-project)
-
----
-
 <br/>
 
 <div align="center">
