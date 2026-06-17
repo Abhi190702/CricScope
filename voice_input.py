@@ -3,8 +3,14 @@ voice_input.py - uses CSS transform to reposition without breaking click target
 """
 
 import streamlit as st
-from groq import Groq
 import hashlib
+
+try:
+    from groq import Groq
+    _groq_available = True
+except ImportError:
+    Groq = None
+    _groq_available = False
 
 
 def voice_input_component() -> str | None:
@@ -357,6 +363,10 @@ div[data-testid="stAudioInput"] > div > *:not(button):not(:has(button)) {
         api_key = st.secrets["groq"]["key"]
     except KeyError:
         st.warning("⚠️ Groq key missing in secrets.toml")
+        return None
+
+    if not _groq_available:
+        st.warning("⚠️ `groq` package is not installed. Run: `pip install groq`")
         return None
 
     with st.spinner("Transcribing…"):

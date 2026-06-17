@@ -2556,18 +2556,17 @@ if st.session_state.page == "chabot":
         if last_msg["role"] == "user":
             try:
                 from cricket_agent import run_agent
-                chatbot_available = True
-
-            except Exception as e:
-                chatbot_available = False
-                chatbot_error = str(e)
-            try:
                 response_text = run_agent(
                     user_message=last_msg["content"],
                     chat_history=st.session_state.chat_messages[:-1],
                 )
             except RuntimeError as e:
                 response_text = f"⚠️ Configuration error: {str(e)}"
+            except ImportError as e:
+                response_text = (
+                    "⚠️ Chatbot dependencies are not installed. "
+                    "Please run: `pip install groq langchain-groq` and restart the app."
+                )
             except Exception as e:
                 response_text = f"⚠️ Something went wrong: {str(e)}"
 

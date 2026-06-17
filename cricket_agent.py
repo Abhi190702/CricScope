@@ -46,7 +46,6 @@ RESPONSE STYLE:
 
 
 @st.cache_resource
-@st.cache_resource
 def get_chain():
     """
     Build and cache the LCEL chain:
@@ -101,25 +100,6 @@ key = "YOUR_GROQ_API_KEY"
     chain = prompt | llm | StrOutputParser()
 
     return chain
-    
-
-    llm = ChatGroq(
-        groq_api_key=api_key,
-        model_name="llama-3.1-8b-instant",
-        temperature=0.7,
-        max_tokens=1024,
-    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        MessagesPlaceholder(variable_name="history"),   # sliding window injected here
-        ("human", "{question}"),
-    ])
-
-    chain = prompt | llm | StrOutputParser()
-    return chain
-
-
 
 
 def _build_history(chat_history: list[dict], window: int = 6) -> list:
