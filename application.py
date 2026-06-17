@@ -1848,28 +1848,35 @@ if st.session_state.page == "Analysis":
                     "bowling_team_prob": bowl_prob
                 })
 
-    
+        export_df = pd.DataFrame(rows)
 
-      
+        if not export_df.empty:
+            st.download_button(
+                label="⬇️ Download Ball-by-Ball Predictions (CSV)",
+                data=export_df.to_csv(index=False),
+                file_name=f"{batting_team}_vs_{bowling_team}_predictions.csv",
+                mime="text/csv"
+            )
+
         st.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
+        
+        # Generate ball-by-ball predictions for export
+        with st.spinner("Generating export data..."):
+            export_df = generate_ball_by_ball_df(
+                pipe, batting_team, bowling_team, selected_city,
+                target, score, overs, wickets
+            )
+            csv_data = export_df.to_csv(index=False)
+        
+        st.download_button(
+            label="📊 Download Ball-by-Ball Prediction Data (CSV)",
+            data=csv_data,
+            file_name=f"cricscope_predictions_{batting_team.lower().replace(' ', '_')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
-with st.spinner("Generating export data..."):
-    export_df = generate_ball_by_ball_df(
-        pipe, batting_team, bowling_team, selected_city,
-        target, score, overs, wickets
-    )
-
-csv_data = export_df.to_csv(index=False)
-
-st.download_button(
-    label="📊 Download Ball-by-Ball Prediction Data (CSV)",
-    data=csv_data,
-    file_name=f"cricscope_predictions_{batting_team.lower().replace(' ', '_')}.csv",
-    mime="text/csv",
-    use_container_width=True
-)
-
-st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)  # close main-pad
     
 # -----------------------------------
 # TEAM ANALYSIS PAGE
