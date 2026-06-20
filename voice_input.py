@@ -14,13 +14,28 @@ def voice_input_component() -> str | None:
         /* Container that wraps stAudioInput — move this to bottom bar area */
         div[data-testid="stElementContainer"]:has(div[data-testid="stAudioInput"]) {
             position: fixed !important;
-            bottom:93px !important;
+            bottom: 93px !important;
             right: 210px !important;
             z-index: 99999 !important;
             width: 42px !important;
             height: 42px !important;
             padding: 0 !important;
             margin: 0 !important;
+        }
+
+        /* Responsive positioning for smaller laptops and tablets */
+        @media (max-width: 1024px) {
+            div[data-testid="stElementContainer"]:has(div[data-testid="stAudioInput"]) {
+                right: 10% !important;
+            }
+        }
+
+        /* Responsive positioning for mobile viewports */
+        @media (max-width: 768px) {
+            div[data-testid="stElementContainer"]:has(div[data-testid="stAudioInput"]) {
+                right: 5% !important;
+                bottom: 80px !important;
+            }
         }
 
         div[data-testid="stAudioInput"] {
