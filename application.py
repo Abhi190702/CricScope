@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 st.markdown("""
 <style>
 
@@ -924,6 +925,47 @@ def load_data():
     matches = pd.read_csv("matches.csv")
     deliveries = pd.read_csv("deliveries.csv")
     return matches, deliveries
+
+def generate_phase_matrix(matches, deliveries, selected_city):
+    # 1. Merge deliveries with matches to get CITY and winner
+    matches_subset = matches[['id', 'city', 'winner']].rename(columns={'id': 'match_id'})
+    df = deliveries.merge(matches_subset, on='match_id')
+
+    # 2. Filter for the selected CITY and ONLY the 2nd innings (the chasing team)
+    df = df[(df['city'] == selected_city) & (df['inning'] == 2)].copy()
+
+    # 3. Calculate cumulative wickets fallen per match
+    df['is_wicket'] = df['player_dismissed'].notnull().astype(int)
+    df['wickets_fallen'] = df.groupby('match_id')['is_wicket'].cumsum()
+
+    # 4. Create categorical bins for the matrix rows and columns
+    df['Match Phase'] = pd.cut(
+        df['over'], 
+        bins=[0, 6, 15, 20], 
+        labels=['Powerplay (1-6)', 'Middle (7-15)', 'Death (16-20)'], 
+        include_lowest=True
+    )
+    
+    df['Wickets Lost'] = pd.cut(
+        df['wickets_fallen'], 
+        bins=[-1, 3, 6, 10], 
+        labels=['0-3 Wickets', '4-6 Wickets', '7+ Wickets']
+    )
+
+    # 5. Calculate if the chasing team actually won that match
+    df['is_win'] = (df['batting_team'] == df['winner']).astype(int)
+
+    # 6. Generate the Matrix using a Pivot Table
+    matrix = pd.pivot_table(
+        df, 
+        values='is_win', 
+        index='Match Phase', 
+        columns='Wickets Lost', 
+        aggfunc='mean'
+    )
+    
+    # Convert decimal probabilities to clean percentages
+    return (matrix * 100).round(1)
 
 # -----------------------------------
 # MODEL
@@ -1867,6 +1909,37 @@ if st.session_state.page == "Analysis":
                 file_name=f"{batting_team}_vs_{bowling_team}_predictions.csv",
                 mime="text/csv"
             )
+
+        # ---- HISTORICAL VENUE MATRIX FEATURE ----
+        st.markdown('<div style="height:32px;"></div>', unsafe_allow_html=True)
+        st.markdown("""
+            <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;
+                        color:rgba(212,175,55,0.4);margin-bottom:16px;font-weight:500;">
+                Historical Venue Intelligence: Wickets vs Phase
+            </div>
+        """, unsafe_allow_html=True)
+
+        with st.spinner("Crunching historical ball-by-ball data..."):
+            matches_df, deliveries_df = load_data()
+            try:
+                matrix_df = generate_phase_matrix(matches_df, deliveries_df, selected_city)
+
+                if not matrix_df.empty:
+                    st.markdown(f"""
+    <div style="font-size:13px; color:rgba(220,210,185,0.6); margin-bottom: 12px; line-height:1.5;">
+        Historical win percentages for teams chasing in <b>{selected_city}</b>, categorized by match phase and wickets lost.
+    </div>
+""", unsafe_allow_html=True)
+
+                    # Render matrix using Pandas background gradient (YlOrBr matches the gold aesthetic)
+                    st.dataframe(
+                        matrix_df.style.background_gradient(cmap="YlOrBr", axis=None).format("{:.1f}%"),
+                        use_container_width=True
+                    )
+                else:
+                    st.info(f"Not enough historical data available for {selected_city} to generate the matrix.")
+            except Exception as e:
+                st.error("Could not generate historical matrix for this venue.")
 
         st.markdown('<div style="height:20px;"></div>', unsafe_allow_html=True)
         
