@@ -1,4 +1,6 @@
+import os
 import streamlit as st
+
 try:
     from langchain_groq import ChatGroq
 except ImportError:
@@ -7,6 +9,12 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
 
 
 SYSTEM_PROMPT = """You are CricScope's AI Cricket Assistant — a knowledgeable, 
@@ -43,9 +51,6 @@ RESPONSE STYLE:
   politely redirect back to cricket."""
 
 
-
-
-@st.cache_resource
 @st.cache_resource
 def get_chain():
     """
@@ -57,32 +62,25 @@ def get_chain():
 
     if ChatGroq is None:
         raise RuntimeError(
-            "langchain-groq is not installed.\n"
-            "Run:\n"
-            "pip install langchain-groq"
+            "langchain-groq is not installed.\n" "Run:\n" "pip install langchain-groq"
         )
-
     try:
         api_key = st.secrets["groq"]["key"]
-
     except Exception:
-        st.error("⚠️ Groq API key not found.")
-
-        st.info(
-            "Create .streamlit/secrets.toml"
-        )
-
-        st.code(
-            """
-[groq]
-key = "YOUR_GROQ_API_KEY"
-"""
-        )
-
-        st.stop()
+        api_key = os.environ.get("GROQ_API_KEY")
 
     if not api_key:
-        st.error("⚠️ Empty Groq API key.")
+        st.error(" Groq API key not found.")
+
+        st.info(
+            "To enable the chatbot, either:\n\n"
+            "**Option A —** create a `.streamlit/secrets.toml` file in the project root with:\n"
+            '```toml\n[groq]\nkey = "YOUR_GROQ_API_KEY"\n```\n\n'
+            "**Option B —** create a `.env` file in the project root with:\n"
+            "```\nGROQ_API_KEY=YOUR_GROQ_API_KEY\n```\n\n"
+            "Get your free API key at https://console.groq.com"
+        )
+
         st.stop()
 
     llm = ChatGroq(
@@ -92,34 +90,17 @@ key = "YOUR_GROQ_API_KEY"
         max_tokens=1024,
     )
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        MessagesPlaceholder(variable_name="history"),
-        ("human", "{question}"),
-    ])
-
-    chain = prompt | llm | StrOutputParser()
-
-    return chain
-    
-
-    llm = ChatGroq(
-        groq_api_key=api_key,
-        model_name="llama-3.1-8b-instant",
-        temperature=0.7,
-        max_tokens=1024,
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_PROMPT),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}"),
+        ]
     )
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        MessagesPlaceholder(variable_name="history"),   # sliding window injected here
-        ("human", "{question}"),
-    ])
-
     chain = prompt | llm | StrOutputParser()
+
     return chain
-
-
 
 
 def _build_history(chat_history: list[dict], window: int = 6) -> list:
@@ -131,11 +112,11 @@ def _build_history(chat_history: list[dict], window: int = 6) -> list:
     Only the last `window` turns are kept to avoid token overflow.
     """
     # Take the last N messages (window * 2 covers N full turns)
-    recent = chat_history[-(window * 2):]
+    recent = chat_history[-(window * 2) :]
 
     lc_messages = []
     for msg in recent:
-        role    = msg.get("role", "")
+        role = msg.get("role", "")
         content = msg.get("content", "")
         if role == "user":
             lc_messages.append(HumanMessage(content=content))
@@ -143,8 +124,6 @@ def _build_history(chat_history: list[dict], window: int = 6) -> list:
             lc_messages.append(AIMessage(content=content))
 
     return lc_messages
-
-
 
 
 def run_agent(user_message: str, chat_history: list[dict]) -> str:
@@ -164,10 +143,12 @@ def run_agent(user_message: str, chat_history: list[dict]) -> str:
     history = _build_history(chat_history)
 
     try:
-        response = chain.invoke({
-            "history":  history,
-            "question": user_message,
-        })
+        response = chain.invoke(
+            {
+                "history": history,
+                "question": user_message,
+            }
+        )
         return response
 
     except Exception as e:
@@ -182,4 +163,3 @@ def run_agent(user_message: str, chat_history: list[dict]) -> str:
             return "⚠️ Request timed out. Please try again."
         else:
             return f"⚠️ Something went wrong: {str(e)}"
-
