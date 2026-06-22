@@ -21,7 +21,7 @@ section[data-testid="stSidebar"] {
 
 </style>
 """, unsafe_allow_html=True)
-import pandas as pd
+import pandas as p
 import numpy as np
 import time
 import os
@@ -1286,7 +1286,11 @@ with st.sidebar:
 
     if st.button("✦  Chatbot", key="nav_chatbot"):
         st.session_state.page = "chatbot"
-        
+
+    if st.button("🏆  Player Impact", key="nav_player_impact"):
+        st.session_state.page = "player_impact"
+
+
     st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-section-label">Model Configuration</div>', unsafe_allow_html=True)
 
@@ -2732,3 +2736,210 @@ if st.session_state.page == "chatbot":
  
             
 st.markdown("</div>", unsafe_allow_html=True)
+
+
+# Replace the placeholder player_impact section with this full implementation
+if st.session_state.page == "player_impact":
+
+    st.markdown("""
+        <div class="hero-wrapper" style="padding-bottom:32px;">
+            <div class="hero-eyebrow">🏆 Individual Performance Analytics</div>
+            <div class="hero-title" style="font-size:clamp(36px,4vw,56px); margin-bottom:10px;">Player Impact Dashboard</div>
+            <div class="hero-subtitle">Quantifying match-defining contributions • Batter & Bowler Impact Scores • Match MVPs</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="main-pad">', unsafe_allow_html=True)
+
+    matches, deliveries = load_data()
+
+    # Data Preparation for Player Impact
+    @st.cache_data
+    def compute_player_impact():
+        # Batter Stats
+        batter_df = deliveries[deliveries['batting_team'].notna()].copy()
+        batter_df['is_boundary'] = batter_df['batsman_runs'].isin([4,6]).astype(int)
+        batter_df['is_six'] = (batter_df['batsman_runs'] == 6).astype(int)
+        
+        batter_stats = batter_df.groupby(['match_id', 'batter']).agg(
+            runs=('batsman_runs', 'sum'),
+            balls=('ball', 'count'),
+            boundaries=('is_boundary', 'sum'),
+            sixes=('is_six', 'sum'),
+            dismissals=('player_dismissed', lambda x: x.notna().sum())
+        ).reset_index()
+        
+        batter_stats['strike_rate'] = (batter_stats['runs'] / batter_stats['balls'] * 100).round(2)
+        batter_stats['boundary_pct'] = (batter_stats['boundaries'] / batter_stats['balls'] * 100).round(2)
+        
+        # Team total per match for contribution
+        team_totals = deliveries.groupby(['match_id', 'batting_team'])['total_runs'].sum().reset_index(name='team_total')
+        batter_stats = batter_stats.merge(team_totals, left_on=['match_id', 'batter'], right_on=['match_id', 'batting_team'], how='left')
+        batter_stats['contribution_pct'] = (batter_stats['runs'] / batter_stats['team_total'] * 100).round(2).fillna(0)
+        
+        # Bowler Stats
+        bowler_df = deliveries[deliveries['bowling_team'].notna()].copy()
+        bowler_df['is_dot'] = (bowler_df['total_runs'] == 0).astype(int)
+        bowler_df['is_wicket'] = bowler_df['player_dismissed'].notna().astype(int)
+        
+        bowler_stats = bowler_df.groupby(['match_id', 'bowler']).agg(
+            runs_conceded=('total_runs', 'sum'),
+            balls_bowled=('ball', 'count'),
+            wickets=('is_wicket', 'sum'),
+            dot_balls=('is_dot', 'sum'),
+            fours_conceded=('batsman_runs', lambda x: (x==4).sum()),
+            sixes_conceded=('batsman_runs', lambda x: (x==6).sum())
+        ).reset_index()
+        
+        bowler_stats['overs'] = (bowler_stats['balls_bowled'] / 6).round(2)
+        bowler_stats['economy'] = (bowler_stats['runs_conceded'] / bowler_stats['overs']).round(2).fillna(0)
+        bowler_stats['dot_pct'] = (bowler_stats['dot_balls'] / bowler_stats['balls_bowled'] * 100).round(2)
+        
+        return batter_stats, bowler_stats, matches
+
+    batter_stats, bowler_stats, matches_df = compute_player_impact()
+
+    # Filters
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        selected_match_id = st.selectbox(
+            "Select Match", 
+            options=matches_df['id'].unique(),
+            format_func=lambda x: f"Match {x} - {matches_df[matches_df['id']==x]['team1'].iloc[0]} vs {matches_df[matches_df['id']==x]['team2'].iloc[0]}"
+        )
+    
+    with col_f2:
+        impact_type = st.radio("Impact Type", ["Batter", "Bowler", "Both"], horizontal=True)
+    
+    with col_f3:
+        min_balls = st.slider("Min Balls Faced/Bowled", 1, 60, 10)
+
+    # Impact Score Calculations
+    def calculate_batter_impact(row):
+        if row['balls'] < min_balls:
+            return 0
+        sr_score = min(row['strike_rate'] / 2, 100)  # Normalize SR
+        bound_score = row['boundary_pct'] * 1.5
+        contrib_score = row['contribution_pct'] * 2
+        runs_score = row['runs'] / 2
+        pressure_bonus = 15 if row['runs'] > 50 else 0  # Simple pressure proxy
+        return round((sr_score + bound_score + contrib_score + runs_score + pressure_bonus) / 5, 1)
+
+    def calculate_bowler_impact(row):
+        if row['balls_bowled'] < min_balls:
+            return 0
+        wk_score = row['wickets'] * 25
+        eco_score = max(100 - (row['economy'] * 8), 0)
+        dot_score = row['dot_pct'] * 1.2
+        impact_score = (wk_score + eco_score + dot_score) / 3
+        return round(min(impact_score, 100), 1)
+
+    # Apply scores
+    batter_stats['impact_score'] = batter_stats.apply(calculate_batter_impact, axis=1)
+    bowler_stats['impact_score'] = bowler_stats.apply(calculate_bowler_impact, axis=1)
+
+    # Filter for selected match
+    match_batters = batter_stats[batter_stats['match_id'] == selected_match_id].copy()
+    match_bowlers = bowler_stats[bowler_stats['match_id'] == selected_match_id].copy()
+
+    match_batters = match_batters[match_batters['balls'] >= min_balls]
+    match_bowlers = match_bowlers[match_bowlers['balls_bowled'] >= min_balls]
+
+    # Match MVP
+    all_players = pd.concat([
+        match_batters[['batter', 'impact_score', 'runs']].rename(columns={'batter': 'player', 'runs': 'metric'}),
+        match_bowlers[['bowler', 'impact_score', 'wickets']].rename(columns={'bowler': 'player', 'wickets': 'metric'})
+    ])
+    
+    if not all_players.empty:
+        mvp = all_players.loc[all_players['impact_score'].idxmax()]
+        st.markdown(f"""
+            <div class="prediction-card" style="text-align:center; margin:20px 0;">
+                <div style="font-size:18px; color:#d4af37;">🏆 MATCH MVP</div>
+                <div style="font-family:'Cormorant Garamond',serif; font-size:42px; color:#f0e8cc;">{mvp['player']}</div>
+                <div style="font-size:28px; color:#d4af37;">Impact Score: <b>{mvp['impact_score']}</b></div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Leaderboards
+    tab1, tab2 = st.tabs(["🥇 Batter Impact", "🎯 Bowler Impact"])
+
+    with tab1:
+        if not match_batters.empty:
+            top_batters = match_batters.nlargest(10, 'impact_score')
+            st.subheader("Top Batters - Impact Score")
+            
+            import plotly.express as px
+            fig_bat = px.bar(
+                top_batters, 
+                x='impact_score', 
+                y='batter', 
+                orientation='h',
+                color='runs',
+                color_continuous_scale='Viridis',
+                title="Batter Impact Scores"
+            )
+            fig_bat.update_layout(height=500, template="plotly_dark")
+            st.plotly_chart(fig_bat, use_container_width=True)
+            
+            st.dataframe(
+                top_batters[['batter', 'runs', 'strike_rate', 'boundary_pct', 'contribution_pct', 'impact_score']].sort_values('impact_score', ascending=False),
+                use_container_width=True
+            )
+        else:
+            st.info("No sufficient batting data for this match.")
+
+    with tab2:
+        if not match_bowlers.empty:
+            top_bowlers = match_bowlers.nlargest(10, 'impact_score')
+            st.subheader("Top Bowlers - Impact Score")
+            
+            fig_bowl = px.bar(
+                top_bowlers, 
+                x='impact_score', 
+                y='bowler', 
+                orientation='h',
+                color='wickets',
+                color_continuous_scale='Plasma',
+                title="Bowler Impact Scores"
+            )
+            fig_bowl.update_layout(height=500, template="plotly_dark")
+            st.plotly_chart(fig_bowl, use_container_width=True)
+            
+            st.dataframe(
+                top_bowlers[['bowler', 'wickets', 'economy', 'dot_pct', 'impact_score']].sort_values('impact_score', ascending=False),
+                use_container_width=True
+            )
+        else:
+            st.info("No sufficient bowling data for this match.")
+
+    # Overall Leaderboard across all matches
+    st.markdown("---")
+    st.subheader("📊 Season-Wide Top Performers")
+    
+    overall_batters = batter_stats.groupby('batter').agg({
+        'impact_score': 'mean',
+        'runs': 'sum',
+        'balls': 'sum'
+    }).reset_index().nlargest(8, 'impact_score')
+    
+    overall_bowlers = bowler_stats.groupby('bowler').agg({
+        'impact_score': 'mean',
+        'wickets': 'sum',
+        'balls_bowled': 'sum'
+    }).reset_index().nlargest(8, 'impact_score')
+
+    col_ov1, col_ov2 = st.columns(2)
+    with col_ov1:
+        st.markdown("**Top Batters (Avg Impact)**")
+        st.dataframe(overall_batters, use_container_width=True)
+    with col_ov2:
+        st.markdown("**Top Bowlers (Avg Impact)**")
+        st.dataframe(overall_bowlers, use_container_width=True)
+
+    # Back button
+    if st.button("⬅ Back to Dashboard"):
+        st.session_state.page = "Dashboard"
+        st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
