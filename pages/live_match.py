@@ -18,6 +18,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
+from utils import safe_divide
 
 # ───────────────────────────────────────────
 #  PAGE CONFIG
@@ -563,8 +564,8 @@ def compute_prediction(batting_team, bowling_team, venue, target,
             balls_left = 1  # avoid division by zero at end of innings
 
         wickets_in_hand = 10 - wickets_fallen
-        crr = current_score / (total_balls_bowled / 6) if total_balls_bowled > 0 else 0
-        rrr = (runs_left * 6) / balls_left if balls_left > 0 else 0
+        crr = safe_divide(current_score, total_balls_bowled / 6)
+        rrr = safe_divide(runs_left * 6, balls_left)
 
         # Use a generic city if venue is unknown
         city = venue if venue else "Mumbai"
