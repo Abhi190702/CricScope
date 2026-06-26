@@ -37,7 +37,6 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
-from utils import safe_divide
 
 logging.basicConfig(level=logging.INFO)
 
@@ -1258,8 +1257,8 @@ def generate_ball_by_ball_df(pipe, batting_team, bowling_team, selected_city, ta
 def safe_calculate_rates(score, target, overs):
     runs_left = target - score
     balls_left = max(120 - (overs * 6), 0)
-    crr = safe_divide(score, overs)
-    rrr = safe_divide(runs_left * 6, balls_left)
+    crr = score / overs if overs > 0 else 0.0
+    rrr = (runs_left * 6) / balls_left if balls_left > 0 else 0.0
     return runs_left, balls_left, crr, rrr
 
 # -----------------------------------
@@ -1976,8 +1975,8 @@ if st.session_state.page == "Analysis":
                 b_left = 120 - total_balls_done
                 c_score = score  # score stays same (projection from current state)
                 r_left = target - c_score
-                c_crr = safe_divide(c_score, total_balls_done / 6)
-                c_rrr = safe_divide(r_left * 6, b_left)
+                c_crr = c_score / (total_balls_done / 6) if total_balls_done > 0 else 0
+                c_rrr = (r_left * 6) / b_left if b_left > 0 else 0
 
                 proj_df = pd.DataFrame({
                     'batting_team': [batting_team],
