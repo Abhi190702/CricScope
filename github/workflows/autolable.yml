@@ -64,7 +64,7 @@ jobs:
   #
   # Purpose:
   # Ensure label exists and add it
-  # to newly opened issues.
+  # to opened issues.
   # ========================================================
 
   add-nsoc-label:
