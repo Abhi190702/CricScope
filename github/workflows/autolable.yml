@@ -4,7 +4,6 @@
 # Automatically ensure that a label named
 # "GSSoC'26" exists and attach it whenever
 # a new issue is opened in the repository.
-#
 # Expanded version with comments and spacing
 # for readability and documentation.
 # ==========================================================
